@@ -517,6 +517,10 @@
   </div>
   <div class="header-stats">
     <div class="stat">
+      <div class="stat-val" style="font-size:11px;color:var(--text2)" id="hdr-provider">—</div>
+      <div class="stat-label">Provider</div>
+    </div>
+    <div class="stat">
       <div class="stat-val purple" id="hdr-gen">—</div>
       <div class="stat-label">Generation</div>
     </div>
@@ -830,6 +834,7 @@ async function loadStatus() {
   try {
     const r = await fetch('/api/status');
     const d = await r.json();
+    document.getElementById('hdr-provider').textContent = d.provider || '—';
     document.getElementById('hdr-gen').textContent = `Gen ${d.generation}`;
     document.getElementById('hdr-reqs').textContent = d.total_requests;
     document.getElementById('hdr-rate').textContent = d.total_requests > 0 ? `${d.success_rate}%` : '—';

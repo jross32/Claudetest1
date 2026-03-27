@@ -1,12 +1,19 @@
 """
-AI Coding Engine — wraps Claude for code generation, analysis, improvement, and explanation.
+AI Coding Engine — uses OpenAI-compatible API (OpenAI, Ollama, Groq, Mistral, etc.)
 Streams tokens back through an async generator.
 """
-import anthropic
+import os
 from typing import AsyncGenerator
+from openai import AsyncOpenAI
 from evolution import get_system_prompt
 
-client = anthropic.AsyncAnthropic()
+def _client() -> AsyncOpenAI:
+    base_url = os.getenv("OPENAI_BASE_URL") or None
+    api_key  = os.getenv("OPENAI_API_KEY", "no-key")
+    return AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+def _model() -> str:
+    return os.getenv("OPENAI_MODEL", "gpt-4o")
 
 MODE_INSTRUCTIONS = {
     "generate": (
@@ -32,7 +39,7 @@ MODE_INSTRUCTIONS = {
     ),
     "test": (
         "Write comprehensive tests for the provided code. Cover happy paths, edge cases, "
-        "and error conditions. Use appropriate testing framework for the language."
+        "and error conditions. Use an appropriate testing framework for the language."
     ),
     "chat": (
         "Help with the user's coding question. Be concise, accurate, and practical. "
@@ -47,37 +54,37 @@ async def stream_response(
     language: str = "python",
     extra_context: str = "",
 ) -> AsyncGenerator[str, None]:
-    """
-    Stream a response from Claude for the given coding task.
-    Yields text chunks as they arrive.
-    """
-    system = get_system_prompt()
+    """Stream a response for the given coding task."""
+    client = _client()
+    base_system = get_system_prompt()
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["generate"])
 
-    system_full = f"{system}\n\nCurrent task mode: {mode_instruction}"
+    system = f"{base_system}\n\nTask mode: {mode_instruction}"
     if language and mode != "chat":
-        system_full += f"\n\nTarget language: {language}"
+        system += f"\n\nTarget language: {language}"
 
     user_content = prompt
     if extra_context:
-        user_content = f"Context:\n{extra_context}\n\nRequest:\n{prompt}"
+        user_content = f"Code context:\n```\n{extra_context}\n```\n\nRequest:\n{prompt}"
 
-    async with client.messages.stream(
-        model="claude-opus-4-6",
+    stream = await client.chat.completions.create(
+        model=_model(),
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user_content},
+        ],
+        stream=True,
+        temperature=0.2,
         max_tokens=4096,
-        thinking={"type": "adaptive"},
-        system=system_full,
-        messages=[{"role": "user", "content": user_content}],
-    ) as stream:
-        async for text in stream.text_stream:
-            yield text
+    )
+
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
 
 
-async def quick_response(
-    prompt: str,
-    mode: str = "generate",
-    language: str = "python",
-) -> str:
+async def quick_response(prompt: str, mode: str = "generate", language: str = "python") -> str:
     """Non-streaming version for internal use."""
     chunks = []
     async for chunk in stream_response(prompt, mode, language):

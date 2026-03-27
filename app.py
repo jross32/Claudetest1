@@ -1,5 +1,6 @@
 """
 AI Coder Dashboard — FastAPI backend with WebSocket streaming and self-evolution.
+Uses OpenAI-compatible API: OpenAI, Ollama, Groq, Mistral, LM Studio, etc.
 """
 import json
 import os
@@ -67,6 +68,18 @@ async def serve_dashboard():
 @app.get("/api/status")
 async def get_status():
     state = evolution.get_state()
+    base_url = os.getenv("OPENAI_BASE_URL", "")
+    model    = os.getenv("OPENAI_MODEL", "gpt-4o")
+    if "ollama" in base_url or "11434" in base_url:
+        provider = f"Ollama ({model})"
+    elif "groq" in base_url:
+        provider = f"Groq ({model})"
+    elif "mistral" in base_url:
+        provider = f"Mistral ({model})"
+    elif base_url:
+        provider = f"Custom ({model})"
+    else:
+        provider = f"OpenAI ({model})"
     return {
         "generation": state["generation"],
         "total_requests": state["total_requests"],
@@ -76,6 +89,7 @@ async def get_status():
         "evolution_count": len(state["evolution_history"]),
         "learned_patterns": state["learned_patterns"],
         "current_prompt_preview": state["current_system_prompt"][:200] + "...",
+        "provider": provider,
     }
 
 @app.get("/api/history")
