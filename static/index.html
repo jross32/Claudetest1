@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Coder — Self-Evolving Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text2: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #3fb950;
+      --accent3: #f78166;
+      --accent4: #d2a8ff;
+      --yellow: #e3b341;
+      --card: #1c2128;
+      --glow: rgba(88,166,255,0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .logo-icon { font-size: 22px; }
+    .header-stats {
+      display: flex;
+      gap: 20px;
+      margin-left: auto;
+      align-items: center;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .stat-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-val.green { color: var(--accent2); }
+    .stat-val.purple { color: var(--accent4); }
+    .stat-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .evolve-btn {
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .evolve-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .evolve-btn:active { transform: translateY(0); }
+    .evolve-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .conn-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      transition: background 0.3s;
+    }
+    .conn-dot.connected { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+
+    /* ── Main layout ── */
+    .main {
+      display: grid;
+      grid-template-columns: 300px 1fr 300px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Panel base ── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+    .panel-header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    /* ── Left panel: controls ── */
+    .control-group { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    select, input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    select:focus, input:focus { border-color: var(--accent); }
+    select option { background: var(--bg3); }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .mode-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text2);
+      padding: 7px 6px;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .mode-btn:hover { border-color: var(--accent); color: var(--text); }
+    .mode-btn.active {
+      background: rgba(88,166,255,0.12);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      transition: border-color 0.15s;
+      line-height: 1.5;
+    }
+    textarea:focus { border-color: var(--accent); }
+
+    .send-btn {
+      width: 100%;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      padding: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: opacity 0.2s;
+      margin-top: 8px;
+    }
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .context-toggle {
+      font-size: 11px;
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: underline;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    /* ── Center panel: output ── */
+    .center-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .output-toolbar {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .output-tab {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text2);
+      transition: all 0.15s;
+    }
+    .output-tab.active {
+      background: var(--bg3);
+      color: var(--text);
+    }
+    .copy-btn {
+      margin-left: auto;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text2);
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    .output-area {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    #output {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: none;
+      outline: none;
+      padding: 16px;
+      font-family: 'SFMono-Regular', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      resize: none;
+      overflow-y: auto;
+      tab-size: 2;
+    }
+
+    .streaming-indicator {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .streaming-indicator.active { opacity: 1; }
+    .pulse {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* Feedback bar */
+    .feedback-bar {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feedback-bar.visible { opacity: 1; }
+    .feedback-bar span { font-size: 12px; color: var(--text2); margin-right: 4px; }
+    .fb-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text2);
+      transition: all 0.15s;
+    }
+    .fb-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+    .fb-btn.negative:hover { border-color: var(--accent3); color: var(--accent3); }
+    .fb-btn.voted { opacity: 0.5; cursor: default; }
+
+    /* ── Right panel: evolution & history ── */
+    .evolution-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .evo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(210,168,255,0.12);
+      border: 1px solid rgba(210,168,255,0.3);
+      border-radius: 4px;
+      color: var(--accent4);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      margin-bottom: 8px;
+    }
+    .evo-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .evo-text { font-size: 12px; color: var(--text2); line-height: 1.5; }
+    .evo-improvements { margin-top: 8px; }
+    .evo-improvement-item {
+      display: flex;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--accent2);
+      margin-top: 3px;
+    }
+    .evo-improvement-item::before { content: '✓'; flex-shrink: 0; }
+
+    .history-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .history-item:hover { border-color: var(--accent); }
+    .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .history-mode {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .mode-generate { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .mode-analyze { background: rgba(63,185,80,0.15); color: var(--accent2); }
+    .mode-improve { background: rgba(227,179,65,0.15); color: var(--yellow); }
+    .mode-debug { background: rgba(247,129,102,0.15); color: var(--accent3); }
+    .mode-explain { background: rgba(210,168,255,0.15); color: var(--accent4); }
+    .mode-test { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .mode-chat { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+    .history-time { font-size: 10px; color: var(--text2); margin-left: auto; }
+    .history-prompt { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .feedback-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .feedback-dot.positive { background: var(--accent2); }
+    .feedback-dot.negative { background: var(--accent3); }
+
+    /* ── System log ── */
+    .system-log {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--text2);
+      max-height: 150px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+      scrollbar-width: thin;
+    }
+    .log-entry { line-height: 1.6; }
+    .log-entry .ts { color: var(--border); margin-right: 6px; }
+    .log-entry .msg.evo { color: var(--accent4); }
+    .log-entry .msg.ok { color: var(--accent2); }
+    .log-entry .msg.err { color: var(--accent3); }
+
+    /* ── Progress bar ── */
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent4));
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* ── Prompt viewer ── */
+    .prompt-viewer {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 11px;
+      color: var(--text2);
+      line-height: 1.6;
+      max-height: 120px;
+      overflow-y: auto;
+      margin-top: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ── Tab switching ── */
+    .tab-group {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+    .tab {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text2);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .tab-content { display: none; flex: 1; overflow: hidden; }
+    .tab-content.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Responsive tweaks ── */
+    @media (max-width: 900px) {
+      .main { grid-template-columns: 250px 1fr; }
+      .panel:last-child { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <span class="logo-icon">🤖</span>
+    AI Coder
+    <span style="font-size:10px;font-weight:400;color:var(--text2);margin-left:4px;">Self-Evolving</span>
+  </div>
+  <div class="header-stats">
+    <div class="stat">
+      <div class="stat-val purple" id="hdr-gen">—</div>
+      <div class="stat-label">Generation</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="hdr-reqs">0</div>
+      <div class="stat-label">Requests</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val green" id="hdr-rate">—</div>
+      <div class="stat-label">Success %</div>
+    </div>
+    <button class="evolve-btn" id="evolve-btn" onclick="triggerEvolution()">
+      🧬 Evolve
+    </button>
+    <div class="conn-dot" id="conn-dot" title="WebSocket connection"></div>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<div class="main">
+
+  <!-- ── Left: Controls ── -->
+  <div class="panel">
+    <div class="panel-header">⚙️ Controls</div>
+    <div class="panel-body">
+
+      <!-- Mode -->
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="mode-grid" id="mode-grid">
+          <button class="mode-btn active" data-mode="generate" onclick="selectMode('generate',this)">✨ Generate</button>
+          <button class="mode-btn" data-mode="analyze" onclick="selectMode('analyze',this)">🔍 Analyze</button>
+          <button class="mode-btn" data-mode="improve" onclick="selectMode('improve',this)">⚡ Improve</button>
+          <button class="mode-btn" data-mode="debug" onclick="selectMode('debug',this)">🐛 Debug</button>
+          <button class="mode-btn" data-mode="explain" onclick="selectMode('explain',this)">📖 Explain</button>
+          <button class="mode-btn" data-mode="test" onclick="selectMode('test',this)">🧪 Tests</button>
+          <button class="mode-btn" data-mode="chat" onclick="selectMode('chat',this)" style="grid-column:span 2">💬 Chat</button>
+        </div>
+      </div>
+
+      <!-- Language -->
+      <div class="control-group">
+        <label>Language</label>
+        <select id="language">
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="typescript">TypeScript</option>
+          <option value="rust">Rust</option>
+          <option value="go">Go</option>
+          <option value="java">Java</option>
+          <option value="c++">C++</option>
+          <option value="sql">SQL</option>
+          <option value="bash">Bash</option>
+          <option value="auto">Auto-detect</option>
+        </select>
+      </div>
+
+      <!-- Prompt -->
+      <div class="control-group">
+        <label>Prompt</label>
+        <textarea id="prompt" rows="5" placeholder="Describe what you want to build, analyze, or fix..."></textarea>
+      </div>
+
+      <!-- Optional context -->
+      <div class="control-group">
+        <span class="context-toggle" onclick="toggleContext()">+ Add code context</span>
+        <div id="context-area" style="display:none">
+          <label>Code Context</label>
+          <textarea id="context" rows="6" placeholder="Paste existing code here for analysis/improvement..."></textarea>
+        </div>
+      </div>
+
+      <button class="send-btn" id="send-btn" onclick="sendRequest()">
+        ▶ Run
+      </button>
+
+      <!-- Keyboard hint -->
+      <div style="text-align:center;font-size:11px;color:var(--text2);margin-top:8px;">
+        Ctrl+Enter to run
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Center: Output ── -->
+  <div class="center-panel">
+    <div class="output-toolbar">
+      <div class="output-tab active" onclick="switchOutputTab('output',this)">Output</div>
+      <div class="output-tab" onclick="switchOutputTab('editor',this)">Editor</div>
+      <button class="copy-btn" onclick="copyOutput()">📋 Copy</button>
+    </div>
+
+    <div class="output-area">
+      <textarea id="output" readonly placeholder="Output will appear here...&#10;&#10;Select a mode, write a prompt, and click Run ▶"></textarea>
+      <div class="streaming-indicator" id="stream-indicator">
+        <div class="pulse"></div>
+        <span>Generating...</span>
+      </div>
+    </div>
+
+    <div class="feedback-bar" id="feedback-bar">
+      <span>Was this helpful?</span>
+      <button class="fb-btn" id="fb-yes" onclick="submitFeedback(true)">👍 Yes</button>
+      <button class="fb-btn negative" id="fb-no" onclick="submitFeedback(false)">👎 No</button>
+    </div>
+  </div>
+
+  <!-- ── Right: Evolution & History ── -->
+  <div class="panel">
+    <!-- Tabs -->
+    <div class="tab-group">
+      <div class="tab active" onclick="switchTab('evolution',this)">🧬 Evolution</div>
+      <div class="tab" onclick="switchTab('history',this)">📜 History</div>
+    </div>
+
+    <!-- Evolution tab -->
+    <div class="tab-content active" id="tab-evolution">
+      <div class="panel-body">
+
+        <!-- System log -->
+        <div style="margin-bottom:6px">
+          <label>System Log</label>
+          <div class="system-log" id="system-log">
+            <div class="log-entry"><span class="ts">—</span><span class="msg">Dashboard initialized</span></div>
+          </div>
+        </div>
+
+        <!-- Current prompt -->
+        <div style="margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="togglePromptView()">
+            Current System Prompt
+            <span id="prompt-chevron" style="font-size:10px">▼</span>
+          </label>
+          <div class="prompt-viewer" id="prompt-viewer" style="display:none">Loading...</div>
+        </div>
+
+        <!-- Metrics -->
+        <div style="margin-bottom:12px">
+          <label>Performance</label>
+          <div class="evolution-card">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+              <span style="font-size:12px;color:var(--text2)">Success Rate</span>
+              <span style="font-size:12px;font-weight:700;color:var(--accent2)" id="success-rate">—</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="success-fill" style="width:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:var(--text2)">
+              <span>👍 <span id="pos-count">0</span></span>
+              <span>👎 <span id="neg-count">0</span></span>
+              <span>Total: <span id="total-reqs">0</span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Evolution history -->
+        <div>
+          <label>Evolution History</label>
+          <div id="evo-history">
+            <div style="color:var(--text2);font-size:12px;padding:8px 0">No evolutions yet. Click "Evolve" to begin.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- History tab -->
+    <div class="tab-content" id="tab-history">
+      <div class="panel-body" id="history-list">
+        <div style="color:var(--text2);font-size:12px;padding:8px 0">No history yet. Run some requests first.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let ws = null;
+let currentMode = 'generate';
+let currentSessionId = null;
+let isStreaming = false;
+let reconnectTimer = null;
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('conn-dot').classList.add('connected');
+    clearTimeout(reconnectTimer);
+    logSystem('Connected to server', 'ok');
+    loadStatus();
+    loadHistory();
+  };
+
+  ws.onclose = () => {
+    document.getElementById('conn-dot').classList.remove('connected');
+    logSystem('Connection lost. Reconnecting in 3s...', 'err');
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    logSystem('WebSocket error', 'err');
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleMessage(msg);
+  };
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'stream_start':
+      startStream(msg);
+      break;
+    case 'stream_chunk':
+      appendChunk(msg.text);
+      break;
+    case 'stream_end':
+      endStream(msg);
+      break;
+    case 'evolution_start':
+      setEvolveBtn(true);
+      logSystem(msg.message, 'evo');
+      break;
+    case 'evolution_complete':
+      setEvolveBtn(false);
+      logSystem('Evolution cycle complete! 🧬', 'ok');
+      renderEvolutionRecord(msg.record);
+      loadStatus();
+      break;
+    case 'system':
+      logSystem(msg.message);
+      break;
+    case 'error':
+      logSystem('Error: ' + msg.message, 'err');
+      setStreaming(false);
+      break;
+  }
+}
+
+// ── Streaming ──────────────────────────────────────────────────────────────
+function startStream(msg) {
+  setStreaming(true);
+  document.getElementById('output').value = '';
+  document.getElementById('feedback-bar').classList.remove('visible');
+  currentSessionId = null;
+  logSystem(`Running: ${msg.mode} [${msg.language}]`);
+}
+
+function appendChunk(text) {
+  const ta = document.getElementById('output');
+  ta.value += text;
+  ta.scrollTop = ta.scrollHeight;
+}
+
+function endStream(msg) {
+  setStreaming(false);
+  currentSessionId = msg.session_id;
+  document.getElementById('feedback-bar').classList.add('visible');
+  document.getElementById('fb-yes').classList.remove('voted');
+  document.getElementById('fb-no').classList.remove('voted');
+  logSystem(`Done — ${msg.total_chars} chars`, 'ok');
+  loadStatus();
+  loadHistory();
+}
+
+function setStreaming(active) {
+  isStreaming = active;
+  document.getElementById('stream-indicator').classList.toggle('active', active);
+  document.getElementById('send-btn').disabled = active;
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────
+function sendRequest() {
+  if (isStreaming || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) { document.getElementById('prompt').focus(); return; }
+
+  ws.send(JSON.stringify({
+    type: 'generate',
+    prompt,
+    mode: currentMode,
+    language: document.getElementById('language').value,
+    context: document.getElementById('context').value.trim(),
+  }));
+}
+
+function submitFeedback(positive) {
+  if (!currentSessionId) return;
+  fetch('/api/feedback', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ session_id: currentSessionId, positive }),
+  });
+  document.getElementById('fb-yes').classList.add('voted');
+  document.getElementById('fb-no').classList.add('voted');
+  loadStatus();
+  logSystem(positive ? 'Feedback: 👍 positive' : 'Feedback: 👎 negative', positive ? 'ok' : 'err');
+}
+
+async function triggerEvolution() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'evolve' }));
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    document.getElementById('hdr-gen').textContent = `Gen ${d.generation}`;
+    document.getElementById('hdr-reqs').textContent = d.total_requests;
+    document.getElementById('hdr-rate').textContent = d.total_requests > 0 ? `${d.success_rate}%` : '—';
+    document.getElementById('success-rate').textContent = d.total_requests > 0 ? `${d.success_rate}%` : '—';
+    document.getElementById('success-fill').style.width = `${d.success_rate}%`;
+    document.getElementById('pos-count').textContent = d.positive_feedback;
+    document.getElementById('neg-count').textContent = d.negative_feedback;
+    document.getElementById('total-reqs').textContent = d.total_requests;
+    document.getElementById('prompt-viewer').textContent = d.current_prompt_preview;
+  } catch {}
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/history');
+    const d = await r.json();
+    renderHistory(d.sessions);
+  } catch {}
+}
+
+async function loadEvolutionHistory() {
+  try {
+    const r = await fetch('/api/evolution/history');
+    const d = await r.json();
+    if (d.history.length === 0) return;
+    const container = document.getElementById('evo-history');
+    container.innerHTML = '';
+    d.history.slice().reverse().forEach(rec => renderEvolutionRecord(rec));
+  } catch {}
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────
+function renderHistory(sessions) {
+  const el = document.getElementById('history-list');
+  if (!sessions.length) {
+    el.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:8px 0">No history yet.</div>';
+    return;
+  }
+  el.innerHTML = sessions.map(s => {
+    const fb = s.feedback;
+    const fbDot = fb ? `<div class="feedback-dot ${fb.positive?'positive':'negative'}"></div>` : '';
+    const time = new Date(s.timestamp).toLocaleTimeString();
+    return `
+    <div class="history-item" onclick="loadFromHistory(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+      <div class="history-meta">
+        <span class="history-mode mode-${s.mode}">${s.mode}</span>
+        ${fbDot}
+        <span class="history-time">${time}</span>
+      </div>
+      <div class="history-prompt">${escHtml(s.prompt)}</div>
+    </div>`;
+  }).join('');
+}
+
+function loadFromHistory(session) {
+  document.getElementById('prompt').value = session.prompt;
+  selectMode(session.mode);
+  document.getElementById('output').value = session.response_preview + '\n[Truncated — re-run to see full output]';
+  switchTab('history');
+}
+
+function renderEvolutionRecord(rec) {
+  const container = document.getElementById('evo-history');
+  if (container.querySelector('.no-evo')) container.innerHTML = '';
+
+  const div = document.createElement('div');
+  div.className = 'evolution-card';
+  div.innerHTML = `
+    <div class="evo-badge">🧬 Generation ${rec.generation}</div>
+    <div class="evo-title">${escHtml((rec.analysis||'').substring(0,80))}${rec.analysis&&rec.analysis.length>80?'...':''}</div>
+    <div class="evo-text">${escHtml(rec.expected_impact||'')}</div>
+    ${rec.key_improvements?.length ? `
+    <div class="evo-improvements">
+      ${rec.key_improvements.slice(0,3).map(i => `<div class="evo-improvement-item">${escHtml(i)}</div>`).join('')}
+    </div>` : ''}
+    <div style="font-size:10px;color:var(--text2);margin-top:8px">${new Date(rec.timestamp).toLocaleString()}</div>
+  `;
+  container.insertBefore(div, container.firstChild);
+}
+
+// ── UI helpers ──────────────────────────────────────────────────────────────
+function selectMode(mode, btn) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  if (btn) {
+    btn.classList.add('active');
+  } else {
+    const b = document.querySelector(`[data-mode="${mode}"]`);
+    if (b) b.classList.add('active');
+  }
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => { if (t.textContent.toLowerCase().includes(name)) t.classList.add('active'); });
+  if (name === 'history') loadHistory();
+  if (name === 'evolution') loadEvolutionHistory();
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'evolution') loadEvolutionHistory();
+}
+
+function switchOutputTab(name, btn) {
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function toggleContext() {
+  const area = document.getElementById('context-area');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+}
+
+function togglePromptView() {
+  const viewer = document.getElementById('prompt-viewer');
+  const chevron = document.getElementById('prompt-chevron');
+  const show = viewer.style.display === 'none';
+  viewer.style.display = show ? 'block' : 'none';
+  chevron.textContent = show ? '▲' : '▼';
+}
+
+function copyOutput() {
+  const text = document.getElementById('output').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Copied';
+    setTimeout(() => btn.textContent = '📋 Copy', 1500);
+  });
+}
+
+function setEvolveBtn(loading) {
+  const btn = document.getElementById('evolve-btn');
+  btn.disabled = loading;
+  btn.textContent = loading ? '⏳ Evolving...' : '🧬 Evolve';
+}
+
+function logSystem(msg, cls='') {
+  const log = document.getElementById('system-log');
+  const ts = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="ts">${ts}</span><span class="msg ${cls}">${escHtml(msg)}</span>`;
+  log.insertBefore(entry, log.firstChild);
+  if (log.children.length > 50) log.removeChild(log.lastChild);
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    sendRequest();
+  }
+});
+
+// ── Tab click handlers ─────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    const name = this.textContent.includes('Evolution') ? 'evolution' : 'history';
+    switchTab(name, this);
+  });
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+connect();
+loadStatus();
+setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>
