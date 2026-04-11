@@ -783,6 +783,27 @@
           </div>
         </div>
 
+        <!-- Training controls -->
+        <div style="margin-bottom:10px">
+          <label>Steps (quality guide)</label>
+          <select id="train-steps-preset" onchange="applyStepsPreset(this.value)"
+                  style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;margin-bottom:6px">
+            <option value="500">500 steps — smoke test only (~5 min GPU)</option>
+            <option value="5000">5 000 steps — learns basic syntax (~45 min)</option>
+            <option value="20000">20 000 steps — recognizable code (~3 h)</option>
+            <option value="80000" selected>80 000 steps — good quality (~12-18 h)</option>
+            <option value="200000">200 000 steps — excellent quality (~2-3 days)</option>
+          </select>
+          <label>Batch size</label>
+          <select id="train-batch"
+                  style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none">
+            <option value="4">4 — 6 GB VRAM (safe)</option>
+            <option value="8" selected>8 — 8 GB VRAM (recommended)</option>
+            <option value="16">16 — 12+ GB VRAM (faster)</option>
+            <option value="32">32 — 24 GB VRAM (fastest)</option>
+          </select>
+        </div>
+
         <!-- Buttons -->
         <button class="train-btn phase1" id="btn-train" onclick="startTraining()">
           ▶ Train (Phase 1)
@@ -793,6 +814,12 @@
         <button class="train-btn stop" id="btn-stop" onclick="stopTraining()" style="display:none">
           ⏹ Stop
         </button>
+
+        <!-- AMD note -->
+        <div style="font-size:10px;color:var(--text2);margin-top:8px;line-height:1.6;padding:8px;background:var(--bg3);border-radius:6px">
+          AMD GPU? Install ROCm PyTorch first:<br>
+          <code style="color:var(--accent)">pip install torch --index-url https://download.pytorch.org/whl/rocm6.1</code>
+        </div>
 
       </div>
     </div>
@@ -1050,13 +1077,19 @@ function updateModelTab(m) {
 }
 
 // ── Model / Training ────────────────────────────────────────────────────────
+function applyStepsPreset(v) { trainSteps = parseInt(v) || 80000; }
+
 async function startTraining() {
-  if (!confirm('Start Phase-1 training? This will run for 80 000 steps (hours on CPU, ~1–2 h on GPU).')) return;
+  const steps = parseInt(document.getElementById('train-steps-preset').value) || 80000;
+  const batch = parseInt(document.getElementById('train-batch').value) || 8;
+  const save  = Math.max(100, Math.min(steps, 500));
+  if (!confirm(`Start Phase-1 training for ${steps.toLocaleString()} steps with batch size ${batch}?`)) return;
+  trainSteps = steps;
   try {
     const r = await fetch('/api/train/start', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({steps: 80000, batch_size: 8, lr: 3e-4, save_every: 500, resume: false}),
+      body: JSON.stringify({steps, batch_size: batch, lr: 3e-4, save_every: save, resume: false}),
     });
     const d = await r.json();
     if (d.ok) {
@@ -1113,8 +1146,8 @@ function onTrainingProgress(msg) {
   document.getElementById('tp-tps').textContent = `${(msg.tps||0).toLocaleString()} tok/s`;
   document.getElementById('m-steps').textContent = (msg.step||0).toLocaleString();
   document.getElementById('m-cur-loss').textContent = msg.loss != null ? msg.loss.toFixed(4) : '—';
-  // Progress bar (rough estimate based on 80k steps for phase1, 2k for phase2)
-  const total = (msg.phase === 'finetune') ? 2000 : 80000;
+  // Progress bar (rough estimate based on configured steps)
+  const total = (msg.phase === 'finetune') ? 2000 : trainSteps;
   const pct   = Math.min(100, ((msg.step || 0) / total) * 100);
   document.getElementById('tp-fill').style.width = pct + '%';
   // Sparkline

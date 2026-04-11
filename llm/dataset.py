@@ -1,6 +1,9 @@
 """
-Dataset utilities — collects Python source files from the local installation
-and wraps them in a PyTorch Dataset with FIM augmentation.
+Dataset utilities — collects code files from the local installation and wraps
+them in a PyTorch Dataset with FIM augmentation.
+
+Supported languages: Python, JavaScript, TypeScript (+ common automation
+packages: Playwright, Selenium, Puppeteer, BeautifulSoup, Scrapy, etc.)
 """
 import os
 import sys
@@ -14,56 +17,109 @@ from torch.utils.data import Dataset
 from llm.config import ModelConfig
 from llm.fim import fim_transform
 
+# Extensions to collect by default — Python + JS/TS ecosystem
+DEFAULT_EXTENSIONS = (".py", ".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx")
+
+# Directories to skip unconditionally (binaries, build artifacts, etc.)
+_SKIP_DIRS = {
+    "__pycache__", "test", "tests", "docs", "doc",
+    "dist", "build", ".git", ".svn", ".hg",
+    "coverage", "fixtures", "examples",
+}
+
+# Directories containing high-value automation / scraping libraries
+_AUTOMATION_PACKAGES = {
+    "playwright", "selenium", "puppeteer", "pyppeteer",
+    "beautifulsoup4", "bs4", "scrapy", "requests_html",
+    "mechanize", "httpx", "aiohttp", "requests",
+    "lxml", "parsel", "cssselect", "urllib3",
+}
+
+
+def _find_node_modules(roots: set) -> set:
+    """
+    Search common locations for node_modules to collect JS/TS automation code.
+    Looks relative to the project root and a few well-known npm prefix paths.
+    """
+    extra: set = set()
+    candidates = [
+        os.path.join(os.getcwd(), "node_modules"),
+        os.path.expanduser("~/.npm"),
+        "/usr/local/lib/node_modules",
+        "/usr/lib/node_modules",
+    ]
+    for c in candidates:
+        if os.path.isdir(c):
+            extra.add(c)
+    return extra
+
 
 # ── Source file collection ────────────────────────────────────────────────────
 
 def collect_code_files(
-    extensions: tuple = (".py",),
+    extensions: tuple = DEFAULT_EXTENSIONS,
     extra_dirs: Optional[List[str]] = None,
     max_file_size: int = 500_000,    # skip files larger than 500 KB
     min_file_size: int = 64,         # skip near-empty files
+    include_js: bool = True,         # include JS/TS from node_modules
 ) -> List[str]:
     """
-    Walk the Python stdlib and all site-packages directories, returning
-    the text content of every code file found.
-    Also includes any extra_dirs provided by the user.
-    """
-    search_roots = set()
+    Collect source code from:
+    - Python stdlib + site-packages (.py)
+    - Installed automation packages (playwright, selenium, scrapy, etc.)
+    - node_modules for JS/TS automation code (.js, .ts, etc.)
+    - Any extra_dirs supplied by the user
 
-    # stdlib
+    Returns a list of file contents as strings.
+    """
+    search_roots: set = set()
+
+    # ── Python sources ──────────────────────────────────────────────────────
     stdlib = sysconfig.get_path("stdlib")
     if stdlib and os.path.isdir(stdlib):
         search_roots.add(stdlib)
 
-    # site-packages (all of them — there can be several)
+    platstdlib = sysconfig.get_path("platstdlib")
+    if platstdlib and os.path.isdir(platstdlib):
+        search_roots.add(platstdlib)
+
     for path in sys.path:
         if "site-packages" in path and os.path.isdir(path):
             search_roots.add(path)
+            # Also add any automation sub-packages explicitly
+            for pkg in _AUTOMATION_PACKAGES:
+                pkgdir = os.path.join(path, pkg)
+                if os.path.isdir(pkgdir):
+                    search_roots.add(pkgdir)
 
-    # also include the Python prefix lib directory
-    prefix = sysconfig.get_path("platstdlib")
-    if prefix and os.path.isdir(prefix):
-        search_roots.add(prefix)
+    # ── JS/TS sources ───────────────────────────────────────────────────────
+    if include_js and any(ext in extensions for ext in (".js", ".ts", ".mjs")):
+        for nm in _find_node_modules(search_roots):
+            search_roots.add(nm)
 
+    # ── User-supplied directories ───────────────────────────────────────────
     if extra_dirs:
         for d in extra_dirs:
             if os.path.isdir(d):
                 search_roots.add(d)
 
     texts: List[str] = []
-    seen: set = set()
+    seen:  set = set()
     total_bytes = 0
 
     for root in sorted(search_roots):
         for dirpath, dirnames, filenames in os.walk(root):
-            # Skip hidden dirs, test dirs, __pycache__
+            # Skip hidden dirs and known junk dirs
             dirnames[:] = [
                 d for d in dirnames
                 if not d.startswith(".")
-                and d not in {"__pycache__", "test", "tests", "docs"}
+                and d not in _SKIP_DIRS
             ]
             for fname in filenames:
                 if not any(fname.endswith(ext) for ext in extensions):
+                    continue
+                # Skip minified JS (usually *.min.js or very long single-line files)
+                if fname.endswith(".min.js") or fname.endswith(".min.ts"):
                     continue
                 fpath = os.path.realpath(os.path.join(dirpath, fname))
                 if fpath in seen:
@@ -75,6 +131,10 @@ def collect_code_files(
                         continue
                     with open(fpath, "r", encoding="utf-8", errors="replace") as f:
                         text = f.read()
+                    # Extra filter: skip minified content (single line > 500 chars)
+                    first_line = text.split("\n", 1)[0]
+                    if len(first_line) > 500:
+                        continue
                     texts.append(text)
                     total_bytes += len(text)
                 except (OSError, PermissionError):

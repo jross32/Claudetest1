@@ -85,6 +85,7 @@ class TrainRequest(BaseModel):
     lr: float = 3e-4
     save_every: int = 500
     resume: bool = False
+    extensions: list[str] = []   # empty = use all defaults (py + js/ts)
 
 class FinetuneRequest(BaseModel):
     steps: int = 2_000
@@ -159,6 +160,8 @@ async def train_start(req: TrainRequest):
     _train_stop.clear()
     _train_status.update({"running": True, "phase": "base", "step": 0, "loss": None})
 
+    _exts = tuple(req.extensions) if req.extensions else None
+
     def _run():
         from llm.train import train as _train
         try:
@@ -168,6 +171,7 @@ async def train_start(req: TrainRequest):
                 lr=req.lr,
                 save_every=req.save_every,
                 resume=req.resume,
+                extensions=_exts,
                 progress_callback=_training_progress_cb,
             )
         finally:

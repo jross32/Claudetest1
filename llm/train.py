@@ -29,7 +29,7 @@ from torch.utils.data import DataLoader
 from llm.config import ModelConfig
 from llm.tokenizer import BPETokenizer
 from llm.model import CodeGPT
-from llm.dataset import collect_code_files, CodeDataset
+from llm.dataset import collect_code_files, CodeDataset, DEFAULT_EXTENSIONS
 
 
 def get_device() -> torch.device:
@@ -82,6 +82,7 @@ def train(
     save_every: int = 500,
     resume: bool = False,
     extra_dirs: list | None = None,
+    extensions: tuple | None = None,   # file extensions to collect; default = all
     progress_callback=None,   # called with (step, loss, tokens_per_sec)
 ):
     cfg    = ModelConfig()
@@ -91,17 +92,19 @@ def train(
     if seq_len:
         cfg.max_seq_len = seq_len
 
+    exts = tuple(extensions) if extensions else DEFAULT_EXTENSIONS
+
     # ── Tokenizer ─────────────────────────────────────────────────────────
     tokenizer = BPETokenizer()
     if os.path.exists(cfg.tokenizer_path):
         tokenizer.load(cfg.tokenizer_path)
     else:
-        texts = collect_code_files(extra_dirs=extra_dirs)
+        texts = collect_code_files(extensions=exts, extra_dirs=extra_dirs)
         tokenizer.train(texts, vocab_size=cfg.vocab_size)
         tokenizer.save(cfg.tokenizer_path)
 
     # ── Dataset ───────────────────────────────────────────────────────────
-    texts = collect_code_files(extra_dirs=extra_dirs)
+    texts = collect_code_files(extensions=exts, extra_dirs=extra_dirs)
     all_ids = []
     print("[train] tokenising corpus …")
     for i, text in enumerate(texts):
@@ -212,7 +215,11 @@ if __name__ == "__main__":
     parser.add_argument("--resume",     action="store_true")
     parser.add_argument("--data-dir",   type=str,   default=None,
                         help="Extra directory of code files to include")
+    parser.add_argument("--extensions", type=str,   default=None,
+                        help="Comma-separated file extensions, e.g. .py,.js,.ts")
     args = parser.parse_args()
+
+    exts = tuple(e.strip() for e in args.extensions.split(",")) if args.extensions else None
 
     train(
         steps=args.steps,
@@ -221,4 +228,5 @@ if __name__ == "__main__":
         save_every=args.save_every,
         resume=args.resume,
         extra_dirs=[args.data_dir] if args.data_dir else None,
+        extensions=exts,
     )
