@@ -1,11 +1,13 @@
 """
-Self-Evolution Engine — tracks performance, learns from feedback, and uses the
-configured LLM to rewrite its own system prompts over time.
+Self-Evolution Engine — fully local. Uses the same Ollama model to analyze
+feedback and rewrite its own system prompt over time.
 """
 import json
 import os
+import re
 from datetime import datetime
-from openai import AsyncOpenAI
+from typing import Optional, Callable, Awaitable
+from llm.server import get_server
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "evolution.json")
 
@@ -16,25 +18,17 @@ DEFAULT_STATE = {
     "negative_feedback": 0,
     "evolution_history": [],
     "current_system_prompt": (
-        "You are an expert AI coding assistant. Generate clean, efficient, well-commented code. "
-        "When asked to write code, provide working implementations with clear explanations. "
-        "Follow best practices for the language being used. "
-        "If fixing bugs, explain what was wrong and why the fix works. "
-        "Always prefer readability and correctness over cleverness."
+        "You are an expert AI coding assistant running entirely on a local machine. "
+        "Generate clean, efficient, well-commented code. "
+        "Provide working implementations with clear explanations. "
+        "Follow best practices for the target language. "
+        "When fixing bugs, explain the root cause and the fix."
     ),
     "learned_patterns": [],
     "recent_sessions": [],
 }
 
-
-def _client() -> AsyncOpenAI:
-    base_url = os.getenv("OPENAI_BASE_URL") or None
-    api_key  = os.getenv("OPENAI_API_KEY", "no-key")
-    return AsyncOpenAI(api_key=api_key, base_url=base_url)
-
-def _model() -> str:
-    return os.getenv("OPENAI_MODEL", "gpt-4o")
-
+# ── persistence ───────────────────────────────────────────────────────────────
 
 def _load() -> dict:
     if os.path.exists(DATA_FILE):
@@ -56,10 +50,14 @@ def _save(state: dict):
 def get_state() -> dict:
     return _load()
 
-
 def get_system_prompt() -> str:
     return _load()["current_system_prompt"]
 
+def success_rate(state: dict) -> float:
+    total = state["positive_feedback"] + state["negative_feedback"]
+    return state["positive_feedback"] / total if total else 1.0
+
+# ── recording ─────────────────────────────────────────────────────────────────
 
 def record_request(prompt: str, response_preview: str, mode: str) -> int:
     state = _load()
@@ -89,114 +87,108 @@ def record_feedback(session_id: int, positive: bool, comment: str = ""):
         state["negative_feedback"] += 1
     _save(state)
 
+# ── evolution ─────────────────────────────────────────────────────────────────
 
-def success_rate(state: dict) -> float:
-    total = state["positive_feedback"] + state["negative_feedback"]
-    if total == 0:
-        return 1.0
-    return state["positive_feedback"] / total
+def _extract_tagged(text: str, tag: str) -> Optional[str]:
+    """Extract content between <tag>...</tag>."""
+    m = re.search(rf"<{tag}>(.*?)</{tag}>", text, re.DOTALL | re.IGNORECASE)
+    return m.group(1).strip() if m else None
 
 
-async def run_evolution_cycle(broadcast_fn=None) -> dict:
+def _extract_improvements(text: str) -> list[str]:
+    """Pull bullet points from a block of text."""
+    items = re.findall(r"(?:^|\n)\s*[-*•]\s*(.+)", text)
+    return [i.strip() for i in items if i.strip()][:5]
+
+
+async def run_evolution_cycle(
+    broadcast_fn: Optional[Callable[[str], Awaitable[None]]] = None,
+) -> dict:
     """
-    Uses the configured LLM to analyze recent sessions and rewrite
-    the system prompt to perform better. This is the self-evolution step.
+    Ask the local LLM to analyze its own performance and rewrite its system
+    prompt. No internet required — runs entirely on-device.
     """
     state = _load()
-    client = _client()
-
     rated    = [s for s in state["recent_sessions"] if s["feedback"] is not None]
-    positive = [s for s in rated if s["feedback"]["positive"]][:5]
-    negative = [s for s in rated if not s["feedback"]["positive"]][:5]
+    positive = [s for s in rated if s["feedback"]["positive"]][:4]
+    negative = [s for s in rated if not s["feedback"]["positive"]][:4]
 
     if broadcast_fn:
-        await broadcast_fn("🧬 Starting evolution cycle...")
+        await broadcast_fn("🧬 Starting local evolution cycle...")
 
-    analysis_prompt = f"""You are the meta-AI responsible for improving an AI coding assistant.
+    prompt = f"""You are improving an AI coding assistant's system prompt based on user feedback.
 
-Current system prompt:
-<current_prompt>
+CURRENT SYSTEM PROMPT:
 {state["current_system_prompt"]}
-</current_prompt>
 
-Performance metrics:
-- Total requests: {state["total_requests"]}
-- Positive feedback: {state["positive_feedback"]}
-- Negative feedback: {state["negative_feedback"]}
+METRICS:
+- Requests: {state["total_requests"]}
+- Positive: {state["positive_feedback"]}  Negative: {state["negative_feedback"]}
 - Success rate: {success_rate(state)*100:.1f}%
-- Evolution generation: {state["generation"]}
+- Evolution #: {state["generation"]}
 
-Sessions with POSITIVE feedback (what worked well):
-{json.dumps(positive, indent=2) if positive else "None yet — using general best practices"}
+POSITIVE SESSIONS (worked well):
+{json.dumps([{"prompt": s["prompt"], "mode": s["mode"]} for s in positive], indent=2) if positive else "None yet"}
 
-Sessions with NEGATIVE feedback (what needs improvement):
-{json.dumps(negative, indent=2) if negative else "None yet — using general best practices"}
+NEGATIVE SESSIONS (needs improvement):
+{json.dumps([{"prompt": s["prompt"], "mode": s["mode"], "comment": s["feedback"].get("comment","")} for s in negative], indent=2) if negative else "None yet"}
 
-Your task: Analyze the patterns, then write an improved system prompt that will perform better.
+Write an improved system prompt. Use these exact tags in your response:
 
-Respond ONLY with valid JSON (no markdown, no extra text):
-{{
-  "analysis": "brief analysis of patterns",
-  "key_improvements": ["improvement 1", "improvement 2", "improvement 3"],
-  "new_system_prompt": "the complete improved system prompt",
-  "expected_impact": "how this should help"
-}}"""
+<analysis>
+Brief analysis of what is working and what is not.
+</analysis>
+
+<improvements>
+- improvement one
+- improvement two
+- improvement three
+</improvements>
+
+<new_prompt>
+The complete new system prompt text here.
+</new_prompt>
+
+<impact>
+One sentence on the expected improvement.
+</impact>"""
 
     if broadcast_fn:
-        await broadcast_fn("🤔 Analyzing performance patterns...")
+        await broadcast_fn("🤔 Local model is analyzing performance...")
 
+    server = get_server()
+    full_response = ""
     try:
-        # Try with json_object response format (supported by OpenAI, Groq, some Ollama models)
-        # Fall back to plain text parsing if not supported
-        try:
-            response = await client.chat.completions.create(
-                model=_model(),
-                messages=[{"role": "user", "content": analysis_prompt}],
-                temperature=0.3,
-                max_tokens=1500,
-                response_format={"type": "json_object"},
-            )
-            evolution_data = json.loads(response.choices[0].message.content)
-        except Exception:
-            # Fallback: no response_format constraint
-            response = await client.chat.completions.create(
-                model=_model(),
-                messages=[{"role": "user", "content": analysis_prompt}],
-                temperature=0.3,
-                max_tokens=1500,
-            )
-            raw = response.choices[0].message.content or ""
-            start = raw.find("{")
-            end   = raw.rfind("}") + 1
-            if start >= 0 and end > start:
-                evolution_data = json.loads(raw[start:end])
-            else:
-                raise ValueError("No JSON in response")
-
+        async for chunk in server.stream_chat(
+            [{"role": "user", "content": prompt}],
+            temperature=0.4,
+        ):
+            full_response += chunk
     except Exception as e:
         if broadcast_fn:
-            await broadcast_fn(f"⚠️ Using heuristic evolution (LLM parse failed: {e})")
-        evolution_data = {
-            "analysis": "Heuristic evolution — no rated sessions available yet.",
-            "key_improvements": [
-                "Be more concise in explanations",
-                "Always include runnable examples",
-                "Prefer idiomatic patterns for the target language",
-            ],
-            "new_system_prompt": state["current_system_prompt"] + (
-                "\nAlways include a brief summary of your approach before the code."
-            ),
-            "expected_impact": "Incremental quality improvement",
-        }
+            await broadcast_fn(f"❌ Model error: {e}")
+        raise
 
-    evolution_record = {
+    # Parse structured response
+    analysis     = _extract_tagged(full_response, "analysis") or "Analysis not available"
+    new_prompt   = _extract_tagged(full_response, "new_prompt")
+    impact       = _extract_tagged(full_response, "impact") or ""
+    improvements_text = _extract_tagged(full_response, "improvements") or ""
+    improvements = _extract_improvements(improvements_text)
+
+    # Sanity-check: must be non-trivial
+    if not new_prompt or len(new_prompt) < 50:
+        new_prompt = state["current_system_prompt"]
+        improvements = ["No valid prompt generated — keeping current prompt"]
+
+    record = {
         "generation": state["generation"] + 1,
         "timestamp": datetime.utcnow().isoformat(),
         "old_prompt": state["current_system_prompt"],
-        "new_prompt": evolution_data.get("new_system_prompt", state["current_system_prompt"]),
-        "analysis": evolution_data.get("analysis", ""),
-        "key_improvements": evolution_data.get("key_improvements", []),
-        "expected_impact": evolution_data.get("expected_impact", ""),
+        "new_prompt": new_prompt,
+        "analysis": analysis,
+        "key_improvements": improvements,
+        "expected_impact": impact,
         "metrics_at_evolution": {
             "total_requests": state["total_requests"],
             "success_rate": round(success_rate(state), 3),
@@ -204,14 +196,12 @@ Respond ONLY with valid JSON (no markdown, no extra text):
     }
 
     state["generation"] += 1
-    state["current_system_prompt"] = evolution_record["new_prompt"]
-    state["evolution_history"].append(evolution_record)
-    state["learned_patterns"] = (
-        evolution_data.get("key_improvements", []) + state.get("learned_patterns", [])
-    )[:20]
+    state["current_system_prompt"] = new_prompt
+    state["evolution_history"].append(record)
+    state["learned_patterns"] = (improvements + state.get("learned_patterns", []))[:20]
     _save(state)
 
     if broadcast_fn:
-        await broadcast_fn(f"✅ Evolution complete! Now at generation {state['generation']}")
+        await broadcast_fn(f"✅ Evolution complete — generation {state['generation']}")
 
-    return evolution_record
+    return record

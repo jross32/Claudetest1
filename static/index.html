@@ -458,6 +458,100 @@
       transition: width 0.5s ease;
     }
 
+    /* ── Model tab ── */
+    .model-status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .chip-untrained  { background: rgba(139,148,158,0.15); color: var(--text2); border: 1px solid var(--border); }
+    .chip-loading    { background: rgba(227,179,65,0.15);  color: var(--yellow); border: 1px solid rgba(227,179,65,0.4); }
+    .chip-training   { background: rgba(88,166,255,0.15);  color: var(--accent); border: 1px solid rgba(88,166,255,0.4); }
+    .chip-ready      { background: rgba(63,185,80,0.15);   color: var(--accent2); border: 1px solid rgba(63,185,80,0.4); }
+    .chip-finetuned  { background: rgba(210,168,255,0.15); color: var(--accent4); border: 1px solid rgba(210,168,255,0.4); }
+    .chip-error      { background: rgba(247,129,102,0.15); color: var(--accent3); border: 1px solid rgba(247,129,102,0.4); }
+
+    .model-stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .model-stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .model-stat-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .model-stat-lbl {
+      font-size: 10px;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-top: 2px;
+    }
+
+    .sparkline-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 12px;
+    }
+    .sparkline-label {
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    #loss-sparkline {
+      width: 100%;
+      height: 56px;
+      display: block;
+    }
+
+    .train-progress {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .train-progress-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text2);
+      margin-bottom: 4px;
+    }
+    .train-btn {
+      width: 100%;
+      border: none;
+      border-radius: 7px;
+      padding: 9px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 7px;
+      transition: opacity 0.2s;
+    }
+    .train-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .train-btn.phase1  { background: var(--accent); color: #000; }
+    .train-btn.phase2  { background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff; }
+    .train-btn.stop    { background: var(--accent3); color: #fff; }
+
     /* ── Prompt viewer ── */
     .prompt-viewer {
       background: var(--bg3);
@@ -517,8 +611,8 @@
   </div>
   <div class="header-stats">
     <div class="stat">
-      <div class="stat-val" style="font-size:11px;color:var(--text2)" id="hdr-provider">—</div>
-      <div class="stat-label">Provider</div>
+      <div class="stat-val" style="font-size:11px;color:var(--text2)" id="hdr-model">—</div>
+      <div class="stat-label">Model</div>
     </div>
     <div class="stat">
       <div class="stat-val purple" id="hdr-gen">—</div>
@@ -631,8 +725,76 @@
   <div class="panel">
     <!-- Tabs -->
     <div class="tab-group">
+      <div class="tab" onclick="switchTab('model',this)">🤖 Model</div>
       <div class="tab active" onclick="switchTab('evolution',this)">🧬 Evolution</div>
       <div class="tab" onclick="switchTab('history',this)">📜 History</div>
+    </div>
+
+    <!-- Model tab -->
+    <div class="tab-content" id="tab-model">
+      <div class="panel-body">
+
+        <!-- Status chip -->
+        <div id="model-chip" class="model-status-chip chip-loading">
+          <span id="model-chip-dot">⏳</span>
+          <span id="model-chip-text">Loading…</span>
+        </div>
+
+        <!-- Stats row -->
+        <div class="model-stats-row">
+          <div class="model-stat">
+            <div class="model-stat-val" id="m-params">—</div>
+            <div class="model-stat-lbl">Params (M)</div>
+          </div>
+          <div class="model-stat">
+            <div class="model-stat-val" id="m-vocab">—</div>
+            <div class="model-stat-lbl">Vocab</div>
+          </div>
+          <div class="model-stat">
+            <div class="model-stat-val" id="m-steps">—</div>
+            <div class="model-stat-lbl">Steps</div>
+          </div>
+          <div class="model-stat">
+            <div class="model-stat-val" id="m-device">—</div>
+            <div class="model-stat-lbl">Device</div>
+          </div>
+        </div>
+
+        <!-- Loss sparkline -->
+        <div class="sparkline-wrap">
+          <div class="sparkline-label">
+            <span>Training Loss</span>
+            <span id="m-cur-loss" style="color:var(--accent)">—</span>
+          </div>
+          <svg id="loss-sparkline" viewBox="0 0 260 56" preserveAspectRatio="none">
+            <polyline id="loss-line" fill="none" stroke="#58a6ff" stroke-width="1.5"
+                      stroke-linejoin="round" points=""/>
+          </svg>
+        </div>
+
+        <!-- Live training progress -->
+        <div class="train-progress" id="train-progress-box" style="display:none">
+          <div class="train-progress-row">
+            <span id="tp-phase">Phase 1</span>
+            <span id="tp-tps" style="color:var(--accent2)">— tok/s</span>
+          </div>
+          <div class="progress-bar" style="margin:6px 0">
+            <div class="progress-fill" id="tp-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <button class="train-btn phase1" id="btn-train" onclick="startTraining()">
+          ▶ Train (Phase 1)
+        </button>
+        <button class="train-btn phase2" id="btn-finetune" onclick="startFinetune()">
+          🎯 Fine-tune (Phase 2)
+        </button>
+        <button class="train-btn stop" id="btn-stop" onclick="stopTraining()" style="display:none">
+          ⏹ Stop
+        </button>
+
+      </div>
     </div>
 
     <!-- Evolution tab -->
@@ -703,6 +865,8 @@ let currentMode = 'generate';
 let currentSessionId = null;
 let isStreaming = false;
 let reconnectTimer = null;
+let lossHistory = [];       // [{step, loss}] for sparkline
+let trainSteps = 80000;     // target steps (updated from UI)
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
 function connect() {
@@ -753,6 +917,12 @@ function handleMessage(msg) {
       logSystem('Evolution cycle complete! 🧬', 'ok');
       renderEvolutionRecord(msg.record);
       loadStatus();
+      break;
+    case 'training_progress':
+      onTrainingProgress(msg);
+      break;
+    case 'training_done':
+      onTrainingDone(msg);
       break;
     case 'system':
       logSystem(msg.message);
@@ -834,17 +1004,145 @@ async function loadStatus() {
   try {
     const r = await fetch('/api/status');
     const d = await r.json();
-    document.getElementById('hdr-provider').textContent = d.provider || '—';
+    const m = d.model || {};
+    // Header
+    document.getElementById('hdr-model').textContent = `${m.params_m || '—'}M params`;
     document.getElementById('hdr-gen').textContent = `Gen ${d.generation}`;
     document.getElementById('hdr-reqs').textContent = d.total_requests;
     document.getElementById('hdr-rate').textContent = d.total_requests > 0 ? `${d.success_rate}%` : '—';
+    // Evolution tab
     document.getElementById('success-rate').textContent = d.total_requests > 0 ? `${d.success_rate}%` : '—';
     document.getElementById('success-fill').style.width = `${d.success_rate}%`;
     document.getElementById('pos-count').textContent = d.positive_feedback;
     document.getElementById('neg-count').textContent = d.negative_feedback;
     document.getElementById('total-reqs').textContent = d.total_requests;
     document.getElementById('prompt-viewer').textContent = d.current_prompt_preview;
+    // Model tab
+    updateModelTab(m);
   } catch {}
+}
+
+function updateModelTab(m) {
+  if (!m) return;
+  // Stats
+  document.getElementById('m-params').textContent  = m.params_m  || '—';
+  document.getElementById('m-vocab').textContent   = m.vocab_size ? m.vocab_size.toLocaleString() : '—';
+  document.getElementById('m-steps').textContent   = m.steps_trained ? m.steps_trained.toLocaleString() : '0';
+  document.getElementById('m-device').textContent  = m.device    || '—';
+  // Status chip
+  const chip = document.getElementById('model-chip');
+  const dot  = document.getElementById('model-chip-dot');
+  const txt  = document.getElementById('model-chip-text');
+  chip.className = 'model-status-chip ';
+  if (m.status === 'ready' && m.finetune_done) {
+    chip.className += 'chip-finetuned'; dot.textContent = '✨'; txt.textContent = 'Instruction Tuned';
+  } else if (m.status === 'ready' && m.steps_trained > 0) {
+    chip.className += 'chip-ready'; dot.textContent = '✅'; txt.textContent = 'Base Ready';
+  } else if (m.status === 'ready') {
+    chip.className += 'chip-loading'; dot.textContent = '🎲'; txt.textContent = 'Random Weights';
+  } else if (m.status === 'loading') {
+    chip.className += 'chip-loading'; dot.textContent = '⏳'; txt.textContent = 'Loading…';
+  } else if ((m.status || '').startsWith('error')) {
+    chip.className += 'chip-error'; dot.textContent = '❌'; txt.textContent = 'Error';
+  } else {
+    chip.className += 'chip-untrained'; dot.textContent = '○'; txt.textContent = 'Untrained';
+  }
+}
+
+// ── Model / Training ────────────────────────────────────────────────────────
+async function startTraining() {
+  if (!confirm('Start Phase-1 training? This will run for 80 000 steps (hours on CPU, ~1–2 h on GPU).')) return;
+  try {
+    const r = await fetch('/api/train/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({steps: 80000, batch_size: 8, lr: 3e-4, save_every: 500, resume: false}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setTrainButtons(true, 'base');
+      logSystem('Phase-1 training started', 'ok');
+    } else {
+      logSystem(d.detail || 'Failed to start training', 'err');
+    }
+  } catch(e) { logSystem('Error: ' + e, 'err'); }
+}
+
+async function startFinetune() {
+  if (!confirm('Start Phase-2 fine-tuning? Requires a Phase-1 checkpoint.')) return;
+  try {
+    const r = await fetch('/api/finetune/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({steps: 2000, batch_size: 4, lr: 3e-5}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setTrainButtons(true, 'finetune');
+      logSystem('Phase-2 fine-tuning started', 'ok');
+    } else {
+      logSystem(d.detail || 'Failed to start fine-tuning', 'err');
+    }
+  } catch(e) { logSystem('Error: ' + e, 'err'); }
+}
+
+async function stopTraining() {
+  await fetch('/api/train/stop', { method: 'POST' });
+  logSystem('Stop signal sent', 'err');
+}
+
+function setTrainButtons(running, phase) {
+  document.getElementById('btn-train').disabled    = running;
+  document.getElementById('btn-finetune').disabled = running;
+  document.getElementById('btn-stop').style.display = running ? '' : 'none';
+  const box = document.getElementById('train-progress-box');
+  box.style.display = running ? '' : 'none';
+  if (phase) document.getElementById('tp-phase').textContent =
+    phase === 'base' ? 'Phase 1 — Base Training' : 'Phase 2 — Fine-tuning';
+  const chip = document.getElementById('model-chip');
+  const dot  = document.getElementById('model-chip-dot');
+  const txt  = document.getElementById('model-chip-text');
+  if (running) {
+    chip.className = 'model-status-chip chip-training';
+    dot.textContent = '⚡'; txt.textContent = 'Training…';
+  }
+}
+
+function onTrainingProgress(msg) {
+  // Update progress display
+  document.getElementById('tp-tps').textContent = `${(msg.tps||0).toLocaleString()} tok/s`;
+  document.getElementById('m-steps').textContent = (msg.step||0).toLocaleString();
+  document.getElementById('m-cur-loss').textContent = msg.loss != null ? msg.loss.toFixed(4) : '—';
+  // Progress bar (rough estimate based on 80k steps for phase1, 2k for phase2)
+  const total = (msg.phase === 'finetune') ? 2000 : 80000;
+  const pct   = Math.min(100, ((msg.step || 0) / total) * 100);
+  document.getElementById('tp-fill').style.width = pct + '%';
+  // Sparkline
+  if (msg.loss != null) {
+    lossHistory.push({step: msg.step, loss: msg.loss});
+    if (lossHistory.length > 120) lossHistory = lossHistory.slice(-120);
+    renderSparkline();
+  }
+}
+
+function onTrainingDone(msg) {
+  setTrainButtons(false, null);
+  logSystem(`Training complete — ${msg.phase}`, 'ok');
+  loadStatus();
+}
+
+function renderSparkline() {
+  if (lossHistory.length < 2) return;
+  const W = 260, H = 56, pad = 4;
+  const losses = lossHistory.map(p => p.loss);
+  const minL = Math.min(...losses), maxL = Math.max(...losses);
+  const rng   = maxL - minL || 1;
+  const pts   = lossHistory.map((p, i) => {
+    const x = pad + (i / (lossHistory.length - 1)) * (W - pad * 2);
+    const y = H - pad - ((p.loss - minL) / rng) * (H - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  document.getElementById('loss-line').setAttribute('points', pts.join(' '));
 }
 
 async function loadHistory() {
@@ -1008,14 +1306,30 @@ document.addEventListener('keydown', e => {
 // ── Tab click handlers ─────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', function() {
-    const name = this.textContent.includes('Evolution') ? 'evolution' : 'history';
+    let name = 'evolution';
+    if (this.textContent.includes('Model'))    name = 'model';
+    if (this.textContent.includes('History'))  name = 'history';
     switchTab(name, this);
   });
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
+async function checkTrainStatus() {
+  try {
+    const r = await fetch('/api/train/status');
+    const d = await r.json();
+    if (d.running) setTrainButtons(true, d.phase);
+    if (d.step > 0 && d.loss != null) {
+      lossHistory.push({step: d.step, loss: d.loss});
+      renderSparkline();
+      document.getElementById('m-cur-loss').textContent = d.loss.toFixed(4);
+    }
+  } catch {}
+}
+
 connect();
 loadStatus();
+checkTrainStatus();
 setInterval(loadStatus, 30000);
 </script>
 </body>
